@@ -1,0 +1,72 @@
+name: NepState Marketing Videos
+
+on:
+  schedule:
+    # Run daily at 2 PM EST (19:00 UTC) — after gold/silver (10 AM) and forex runs
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      template:
+        description: 'Force a specific template (optional)'
+        required: false
+        type: choice
+        options:
+          - auto
+          - post_for_free
+          - for_businesses
+          - what_is_nepstate
+          - sample_listing
+          - business_spotlight
+
+jobs:
+  generate-and-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install FFmpeg + fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-noto fonts-dejavu
+
+      - name: Run marketing video pipeline
+        env:
+          MAKE_MARKETING_WEBHOOK_URL: ${{ secrets.MAKE_MARKETING_WEBHOOK_URL }}
+          FORCE_TEMPLATE: ${{ github.event.inputs.template }}
+        run: |
+          if [ "$FORCE_TEMPLATE" != "" ] && [ "$FORCE_TEMPLATE" != "auto" ]; then
+            echo "🎯 Forcing template: $FORCE_TEMPLATE"
+            python -c "
+          import os, shutil
+          from templates.$FORCE_TEMPLATE import run
+          from common import send_to_make
+          success, caption = run()
+          if not success:
+              exit(1)
+          posted = send_to_make('marketing-video.mp4', caption, os.environ.get('MAKE_MARKETING_WEBHOOK_URL',''))
+          if os.path.exists('frames'): shutil.rmtree('frames')
+          "
+          else
+            python main.py
+          fi
+
+      - name: Upload video artifact (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing-video-${{ github.run_id }}
+          path: marketing-video.mp4
+          retention-days: 3
+          if-no-files-found: ignore
