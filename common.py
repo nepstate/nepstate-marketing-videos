@@ -100,10 +100,23 @@ def compile_video(output_path="marketing-video.mp4"):
                "-filter:a", "volume=0.25,afade=t=in:st=0:d=1,afade=t=out:st=11:d=1",
                "-movflags", "+faststart", output_path]
     else:
+        # Synthesize a soft ambient chord (A minor: A2+E3+A3+C4+E4) when no MP3 is available
+        audio_expr = (
+            "0.03*sin(110*2*PI*t)"
+            "+0.025*sin(165*2*PI*t)"
+            "+0.03*sin(220*2*PI*t)"
+            "+0.02*sin(261*2*PI*t)"
+            "+0.02*sin(330*2*PI*t)"
+            "+0.01*sin(440*2*PI*t)"
+        )
         cmd = ["ffmpeg", "-y", "-framerate", str(FPS),
                "-i", f"{FRAMES_DIR}/frame_%04d.png",
-               "-c:v", "libx264", "-pix_fmt", "yuv420p",
-               "-crf", "23", "-movflags", "+faststart", output_path]
+               "-f", "lavfi", "-i", f"aevalsrc={audio_expr}:c=mono:s=44100:d={DURATION}",
+               "-map", "0:v", "-map", "1:a",
+               "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p",
+               "-crf", "23", "-shortest",
+               "-filter:a", "afade=t=in:st=0:d=1,afade=t=out:st=11:d=1",
+               "-movflags", "+faststart", output_path]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(f"[ERROR] FFmpeg: {r.stderr[-400:]}")
