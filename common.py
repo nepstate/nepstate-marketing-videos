@@ -90,8 +90,8 @@ def get_nepali_font(size, bold=False):
 
 def compile_video(output_path="marketing-video.mp4"):
     print("🎞️  Compiling with FFmpeg...")
-    music = os.path.join("assets", "background_music.mp3")
-    if os.path.exists(music):
+    music = next((os.path.join("assets", f) for f in ["background_music.mp3", "background_music.wav"] if os.path.exists(os.path.join("assets", f))), None)
+    if music:
         cmd = ["ffmpeg", "-y", "-framerate", str(FPS),
                "-i", f"{FRAMES_DIR}/frame_%04d.png",
                "-stream_loop", "-1", "-i", music,
