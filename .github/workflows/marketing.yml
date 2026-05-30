@@ -44,6 +44,9 @@ jobs:
       - name: Run marketing video pipeline
         env:
           MAKE_MARKETING_WEBHOOK_URL: ${{ secrets.MAKE_MARKETING_WEBHOOK_URL }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           FORCE_TEMPLATE: ${{ github.event.inputs.template }}
         run: |
           if [ "$FORCE_TEMPLATE" != "" ] && [ "$FORCE_TEMPLATE" != "auto" ]; then

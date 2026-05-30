@@ -2,7 +2,8 @@
 Shared utilities for NepState marketing video templates.
 """
 from PIL import Image, ImageDraw, ImageFont
-import math, os, subprocess, requests
+import math, os, subprocess, requests, hashlib, time
+from datetime import datetime
 
 VIDEO_WIDTH  = 1080
 VIDEO_HEIGHT = 1920
@@ -124,21 +125,57 @@ def compile_video(output_path="marketing-video.mp4"):
     print(f"✅ Video: {output_path}")
     return True
 
-def send_to_make(video_path, caption, webhook_url):
+def upload_to_cloudinary(video_path, video_type="marketing"):
+    cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME", "dmspt2mwy")
+    api_key    = os.environ.get("CLOUDINARY_API_KEY", "")
+    api_secret = os.environ.get("CLOUDINARY_API_SECRET", "")
+    if not api_key or not api_secret:
+        print("⚠️  Cloudinary credentials not set — skipping upload")
+        return None
+    print("☁️  Uploading to Cloudinary...")
+    try:
+        timestamp = str(int(time.time()))
+        public_id = f"nepstate_{video_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        params_to_sign = f"public_id={public_id}&timestamp={timestamp}"
+        signature = hashlib.sha1(f"{params_to_sign}{api_secret}".encode()).hexdigest()
+        url = f"https://api.cloudinary.com/v1_1/{cloud_name}/video/upload"
+        with open(video_path, "rb") as f:
+            res = requests.post(url, data={
+                "api_key": api_key, "timestamp": timestamp,
+                "public_id": public_id, "signature": signature,
+            }, files={"file": f}, timeout=120)
+        if res.status_code == 200:
+            video_url = res.json()["secure_url"]
+            print(f"✅ Cloudinary upload success: {video_url}")
+            return video_url
+        print(f"[ERROR] Cloudinary {res.status_code}: {res.text[:200]}")
+        return None
+    except Exception as e:
+        print(f"[ERROR] Cloudinary upload failed: {e}")
+        return None
+
+def send_to_make(video_path, caption, webhook_url, video_type="marketing"):
     if not webhook_url:
         print("⚠️  MAKE_WEBHOOK_URL not set — skipping")
         return False
+    video_url = upload_to_cloudinary(video_path, video_type)
+    if not video_url:
+        print("[ERROR] Could not get Cloudinary URL — aborting Make.com send")
+        return False
     try:
         print("📤 Sending to Make.com...")
-        with open(video_path, "rb") as f:
-            res = requests.post(webhook_url,
-                files={"video": (os.path.basename(video_path), f, "video/mp4")},
-                data={"caption": caption}, timeout=120)
+        payload = {
+            "video_url":  video_url,
+            "caption":    caption,
+            "video_type": video_type,
+            "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        res = requests.post(webhook_url, json=payload, timeout=30)
         if res.status_code == 200:
-            print("✅ Sent to Make.com!")
+            print(f"✅ Sent to Make.com! Response: {res.text}")
             return True
         print(f"[ERROR] Make.com {res.status_code}: {res.text[:200]}")
         return False
     except Exception as e:
-        print(f"[ERROR] Make.com: {e}")
+        print(f"[ERROR] Make.com send failed: {e}")
         return False
